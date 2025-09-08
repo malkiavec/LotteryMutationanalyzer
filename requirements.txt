@@ -1,2 +1,16 @@
 streamlit
 matplotlib
+Streamlit
+streamlit
+pandas
+numpy
+seaborn
+networkx
+random
+requests
+xgboost
+XGBClassifier
+ftensorflow.keras.models
+Sequential
+tensorflow.keras.layers
+LSTM, Dense
