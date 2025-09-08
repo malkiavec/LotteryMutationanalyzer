@@ -4,7 +4,6 @@ pyngrok
 xgboost  
 tensorflow 
 matplotlib 
-seaborn 
 networkx 
 pandas 
 numpy
