@@ -7,5 +7,5 @@ matplotlib
 networkx 
 pandas 
 numpy
-sklearn
+scikit-learn
 seaborn
