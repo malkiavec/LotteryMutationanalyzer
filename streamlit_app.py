@@ -1,4 +1,3 @@
-
 # Streamlit Lottery Mutation Optimizer App
 import streamlit as st
 import pandas as pd
@@ -51,10 +50,26 @@ use_xgboost = st.sidebar.checkbox("Enable XGBoost Filtering", True)
 
 # Train XGBoost classifier
 def train_xgboost(df):
-    X = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6', 'bonus']]
-    X['Valid'] = 1  # Assume all past draws are valid
-    y = X.pop('Valid')
-    model = XGBClassifier()
+    # Use historical draws as positive examples
+    pos = df[['num1', 'num2', 'num3', 'num4', 'num5', 'num6', 'bonus']].astype(int).copy()
+    pos = pos.reset_index(drop=True)
+    pos['label'] = 1
+
+    # Synthesize negative examples by generating random sequences (same shape)
+    n_neg = len(pos)
+    neg_values = np.random.randint(1, 60, size=(n_neg, 7))  # numbers 1..59 inclusive
+    neg = pd.DataFrame(neg_values, columns=['num1', 'num2', 'num3', 'num4', 'num5', 'num6', 'bonus'])
+    neg['label'] = 0
+
+    # Combine and shuffle
+    data = pd.concat([pos, neg], ignore_index=True)
+    data = data.sample(frac=1, random_state=42).reset_index(drop=True)
+
+    X = data[['num1', 'num2', 'num3', 'num4', 'num5', 'num6', 'bonus']].astype(int)
+    y = data['label'].astype(int)
+
+    # XGBoost: avoid use_label_encoder warning and set eval_metric
+    model = XGBClassifier(use_label_encoder=False, eval_metric='logloss', verbosity=0)
     model.fit(X, y)
     return model
 
@@ -65,9 +80,13 @@ if use_xgboost:
 def generate_mutations(draw, bonus, mutation_level):
     full_sequence = draw + [bonus]
     mutated_sequence = full_sequence.copy()
-    for _ in range(int(mutation_level * len(full_sequence))):
-        mutated_sequence[random.randint(0, len(full_sequence) - 1)] = random.randint(1, 59)
-    return sorted(mutated_sequence)
+    # Number of mutations proportional to mutation_level
+    n_mut = max(1, int(round(mutation_level * len(full_sequence))))
+    for _ in range(n_mut):
+        idx = random.randint(0, len(full_sequence) - 1)
+        mutated_sequence[idx] = random.randint(1, 59)
+    # Keep sequence order (do not sort) so transitions make sense
+    return mutated_sequence
 
 # LSTM model for sequence learning (not trained, just a placeholder)
 def build_lstm():
@@ -83,15 +102,20 @@ lstm_model = build_lstm()
 # Show generated predictions
 st.subheader("Generated Predictions")
 selected_row = df.iloc[-1]
-selected_draw = [selected_row[f'num{i}'] for i in range(1, 7)]
-selected_bonus = selected_row['bonus']
+selected_draw = [int(selected_row[f'num{i}']) for i in range(1, 7)]
+selected_bonus = int(selected_row['bonus'])
 
 st.write("Base Draw:", selected_draw, "Bonus:", selected_bonus)
 mutated_sequences = [generate_mutations(selected_draw, selected_bonus, mutation_level) for _ in range(10)]
 
 # Filter using XGBoost
 if use_xgboost:
-    filtered_sequences = [seq for seq in mutated_sequences if xgb_model.predict([seq])[0] == 1]
+    # Ensure predictor input shape is correct: each seq must be length 7
+    filtered_sequences = []
+    for seq in mutated_sequences:
+        pred = xgb_model.predict([seq])[0]
+        if int(pred) == 1:
+            filtered_sequences.append(seq)
 else:
     filtered_sequences = mutated_sequences
 
